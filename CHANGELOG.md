@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+- Added `context_map`, `context_batch_read`, `context_symbols`, and
+  `context_related` read-only tools.
+- Extended `context_search` with `pathContains`, `extensions`, and
+  `contextLines`.
+- Added multi-project isolation tests for identical relative paths across
+  different worktrees.
 - Documented the Recursive Language Models inspiration from
   [alexzhang13/rlm](https://github.com/alexzhang13/rlm).
 - Added an agent prompt example for broad repository audits.

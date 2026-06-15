@@ -20,9 +20,13 @@ tools should be used, see
 | Tool | Use it for | Safety bounds |
 | --- | --- | --- |
 | `context_outline` | A compact worktree outline and local guidance hints. | Returns relative paths and does not expose the absolute worktree path. |
+| `context_map` | A project map with guidance, manifests, CI files, languages, roles, directories, and optional symbol samples. | Recomputes from the current worktree for each call and returns only relative paths. |
 | `context_files` | Scoped file inventories before choosing focused reads. | Skips VCS, dependency, generated, cache, and secret-like paths. |
-| `context_search` | Literal evidence search across bounded file sets. | Skips large, unreadable, binary-like, and secret-like files; truncates long matches. |
+| `context_search` | Literal evidence search with optional path, extension, and context-line filters. | Skips large, unreadable, binary-like, and secret-like files; truncates long matches and context lines. |
+| `context_batch_read` | Multiple bounded line-range reads in one call. | Applies per-file safety checks and a total line cap. |
 | `context_read` | Line-bounded reads of specific text files. | Confines paths to the worktree and rejects traversal, symlink escapes, oversized files, binary-like files, and secret-like paths. |
+| `context_symbols` | Lightweight symbol discovery for TypeScript, JavaScript, Python, and Java. | Uses deterministic text patterns, no runtime language server or index. |
+| `context_related` | Related-file discovery for imports, imported-by files, likely tests, siblings, and same-basename files. | Resolves only within the current worktree and returns grouped relative paths. |
 
 ## Requirements
 
@@ -61,9 +65,13 @@ Typical agent tool permissions:
 ```yaml
 tools:
   context_outline: allow
+  context_map: allow
   context_files: allow
   context_search: allow
+  context_batch_read: allow
   context_read: allow
+  context_symbols: allow
+  context_related: allow
 ```
 
 The host OpenCode profile decides which agents receive these tools and when they
@@ -78,17 +86,31 @@ recursive-context tools during broad repository reviews:
 When auditing a large repository, map the worktree before reading files
 directly.
 
-1. Call `context_outline` first to identify local guidance and a representative
-   file sample.
-2. Use `context_files` to narrow the relevant directories or file groups.
-3. Use `context_search` for literal evidence before opening files.
-4. Use `context_read` only for focused line ranges that are relevant to the
-   current question.
+1. Call `context_outline` or `context_map` first to identify local guidance,
+   manifests, CI files, source/test directories, and likely entry points.
+2. Use `context_related` and `context_symbols` to find connected files before
+   reading broad areas of the tree.
+3. Use `context_search` for literal evidence, with `pathContains`,
+   `extensions`, and `contextLines` when they reduce noise.
+4. Use `context_batch_read` for several focused ranges, or `context_read` for a
+   single focused range.
 5. Do not use these tools to read secret-like paths, generated directories,
    dependency directories, or unrelated files.
 6. Report findings with file paths, line references, evidence, and any remaining
    verification gaps.
 ```
+
+## Multiple Projects
+
+The plugin is stateless across tool calls. Each tool derives the current root
+from the OpenCode host context (`context.worktree || context.directory`) and
+recomputes inventories, symbols, maps, and related-file groups for that root.
+
+This means a user can work with many unrelated projects as long as the OpenCode
+host supplies the correct worktree for each session. The plugin never stores a
+global "last project", persistent index, related-file graph, or symbol cache.
+Outputs use `worktree: "."` plus relative paths, so they do not expose absolute
+local paths or user names.
 
 ## Safety Model
 
@@ -97,6 +119,7 @@ directly.
 - No generated-code REPL.
 - No network access.
 - No writes.
+- No persistent cache or global mutable project state.
 - Paths are confined to the current OpenCode worktree.
 - Real paths are checked so symlinks or junctions cannot escape the worktree.
 - Common dependency, generated, cache, and VCS directories are skipped.
@@ -151,12 +174,8 @@ npm audit --audit-level=moderate --cache .cache/npm
 npm pack --dry-run --json --cache .cache/npm
 ```
 
-For the first public GitHub release, also add repository metadata to
-`package.json` once the repository URL exists:
-
-- `repository`
-- `bugs`
-- `homepage`
+Repository metadata is configured in `package.json`; update it if the GitHub
+repository moves.
 
 ## Acknowledgements
 
