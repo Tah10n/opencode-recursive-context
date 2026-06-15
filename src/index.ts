@@ -254,6 +254,12 @@ function hasSecretSegment(displayPath: string): boolean {
   return displayPath.split("/").some(isSecretName)
 }
 
+function hasIgnoredDirectorySegment(displayPath: string): boolean {
+  const directory = dirnameOf(displayPath)
+  if (directory === ".") return false
+  return directory.split("/").some((segment) => IGNORE_DIR_NAMES.has(segment.toLowerCase()))
+}
+
 function looksBinary(text: string): boolean {
   return text.includes("\u0000")
 }
@@ -294,6 +300,7 @@ async function walkFiles(
   startPath: string,
   limit: number,
   contains?: string,
+  includeFile?: (displayPath: string) => boolean,
 ): Promise<WalkResult> {
   const files: WalkResult["files"] = []
   const stack = [startPath]
@@ -344,6 +351,7 @@ async function walkFiles(
 
     if (!stat.isFile()) continue
     if (containsLower && !displayPath.toLowerCase().includes(containsLower)) continue
+    if (includeFile && !includeFile(displayPath)) continue
 
     files.push({ path: displayPath, size: stat.size })
     if (files.length >= limit) {
@@ -361,10 +369,19 @@ async function readTextFile(root: string, requestedPath: string, maxBytes: numbe
   text: string
   size: number
 }> {
+  const requestedAbsolutePath = resolveInside(root, requestedPath)
+  const requestedDisplayPath = toDisplayPath(root, requestedAbsolutePath)
+  if (hasIgnoredDirectorySegment(requestedDisplayPath)) {
+    throw new Error(`Refusing generated/dependency/cache path: ${requestedDisplayPath}`)
+  }
+
   const absolutePath = await resolveExistingInside(root, requestedPath)
   if (!absolutePath) throw new Error(`Not a readable file: ${requestedPath}`)
   const displayPath = toDisplayPath(root, absolutePath)
   if (hasSecretSegment(displayPath)) throw new Error(`Refusing to read secret-like file: ${displayPath}`)
+  if (hasIgnoredDirectorySegment(displayPath)) {
+    throw new Error(`Refusing generated/dependency/cache path: ${displayPath}`)
+  }
 
   const stat = await safeStat(absolutePath)
   if (!stat || stat.isSymbolicLink() || !stat.isFile()) throw new Error(`Not a readable file: ${displayPath}`)
@@ -590,12 +607,20 @@ function isLikelyTestFor(target: FileEntry, candidate: FileEntry): boolean {
   return candidateBasename.includes(`${targetStem}.test`) || candidateBasename.includes(`${targetStem}.spec`) || candidateBasename === `${targetStem}test${path.posix.extname(targetBasename)}`
 }
 
-function pushRelated(target: RelatedEntry[], entry: RelatedEntry, seen: Set<string>, maxResults: number): boolean {
+function pushRelated(
+  target: RelatedEntry[],
+  entry: RelatedEntry,
+  seen: Set<string>,
+  resultState: { count: number },
+  maxResults: number,
+): boolean {
   const key = `${entry.reason}:${entry.path}:${entry.detail || ""}`
-  if (seen.has(key)) return target.length >= maxResults
+  if (seen.has(key)) return resultState.count >= maxResults
+  if (resultState.count >= maxResults) return true
   seen.add(key)
   target.push(entry)
-  return target.length >= maxResults
+  resultState.count++
+  return resultState.count >= maxResults
 }
 
 async function collectRelated(root: string, targetFile: FileEntry, files: FileEntry[], maxResults: number): Promise<{
@@ -614,6 +639,7 @@ async function collectRelated(root: string, targetFile: FileEntry, files: FileEn
   const likelyTests: RelatedEntry[] = []
   const sameBasename: RelatedEntry[] = []
   const siblings: RelatedEntry[] = []
+  const resultState = { count: 0 }
   let skippedUnreadable = 0
   let truncated = false
 
@@ -622,7 +648,10 @@ async function collectRelated(root: string, targetFile: FileEntry, files: FileEn
       const targetText = await readTextFile(root, targetFile.path, DEFAULT_MAX_READ_BYTES)
       for (const specifier of extractRelativeImports(targetText.text)) {
         const resolved = resolveImportPath(targetFile.path, specifier, fileSet)
-        if (resolved && pushRelated(directImports, { path: resolved, reason: "direct-import", detail: specifier }, seen, maxResults)) truncated = true
+        if (resolved && pushRelated(directImports, { path: resolved, reason: "direct-import", detail: specifier }, seen, resultState, maxResults)) {
+          truncated = true
+          break
+        }
       }
     } catch {
       skippedUnreadable++
@@ -630,28 +659,31 @@ async function collectRelated(root: string, targetFile: FileEntry, files: FileEn
   }
 
   for (const file of files) {
-    if (directImports.length + importedBy.length + likelyTests.length + sameBasename.length + siblings.length >= maxResults) {
+    if (resultState.count >= maxResults) {
       truncated = true
       break
     }
     if (file.path === targetFile.path) continue
 
     if (file.role === "test" && isLikelyTestFor(targetFile, file)) {
-      if (pushRelated(likelyTests, { path: file.path, reason: "likely-test" }, seen, maxResults)) truncated = true
+      if (pushRelated(likelyTests, { path: file.path, reason: "likely-test" }, seen, resultState, maxResults)) truncated = true
     }
-    if (stemOf(file.path).toLowerCase() === stemOf(targetFile.path).toLowerCase()) {
-      if (pushRelated(sameBasename, { path: file.path, reason: "same-basename" }, seen, maxResults)) truncated = true
+    if (resultState.count < maxResults && stemOf(file.path).toLowerCase() === stemOf(targetFile.path).toLowerCase()) {
+      if (pushRelated(sameBasename, { path: file.path, reason: "same-basename" }, seen, resultState, maxResults)) truncated = true
     }
-    if (dirnameOf(file.path) === dirnameOf(targetFile.path)) {
-      if (pushRelated(siblings, { path: file.path, reason: "sibling" }, seen, maxResults)) truncated = true
+    if (resultState.count < maxResults && dirnameOf(file.path) === dirnameOf(targetFile.path)) {
+      if (pushRelated(siblings, { path: file.path, reason: "sibling" }, seen, resultState, maxResults)) truncated = true
     }
 
-    if (IMPORT_LANGUAGES.has(file.language)) {
+    if (resultState.count < maxResults && IMPORT_LANGUAGES.has(file.language)) {
       try {
         const fileText = await readTextFile(root, file.path, DEFAULT_MAX_READ_BYTES)
         for (const specifier of extractRelativeImports(fileText.text)) {
           const resolved = resolveImportPath(file.path, specifier, fileSet)
-          if (resolved === targetFile.path && pushRelated(importedBy, { path: file.path, reason: "imported-by", detail: specifier }, seen, maxResults)) truncated = true
+          if (resolved === targetFile.path && pushRelated(importedBy, { path: file.path, reason: "imported-by", detail: specifier }, seen, resultState, maxResults)) {
+            truncated = true
+            break
+          }
         }
       } catch {
         skippedUnreadable++
@@ -994,7 +1026,9 @@ export const RecursiveContextPlugin: Plugin = async () => {
           const contextLines = clampInt(args.contextLines, 0, 0, 3)
           const extensions = new Set((args.extensions || []).map(normalizeExtension).filter(Boolean))
           const pathContains = args.pathContains?.toLowerCase()
-          const inventory = await walkFiles(root, startPath, maxFiles)
+          const inventory = await walkFiles(root, startPath, maxFiles, pathContains, (displayPath) => {
+            return extensions.size === 0 || extensions.has(path.posix.extname(displayPath).toLowerCase())
+          })
           const needle = args.caseSensitive ? args.query : args.query.toLowerCase()
           const matches: Array<{
             path: string
@@ -1012,8 +1046,6 @@ export const RecursiveContextPlugin: Plugin = async () => {
 
           for (const entry of inventory.files) {
             if (matches.length >= maxMatches) break
-            if (pathContains && !entry.path.toLowerCase().includes(pathContains)) continue
-            if (extensions.size > 0 && !extensions.has(path.posix.extname(entry.path).toLowerCase())) continue
             if (entry.size > maxBytesPerFile) {
               skippedLarge++
               continue

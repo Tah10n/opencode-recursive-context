@@ -207,6 +207,7 @@ test("context_search supports case sensitivity and bounded excerpts", async () =
 
 test("context_search filters by path and extension and can include bounded context lines", async () => {
   await withWorkspace(async (root) => {
+    await writeWorkspaceFile(root, "aaa.txt", "needle\n")
     await writeWorkspaceFile(root, "src/app.ts", "before\nneedle\n" + "c".repeat(400) + "\n")
     await writeWorkspaceFile(root, "docs/app.md", "needle\n")
     await writeWorkspaceFile(root, "src/app.js", "needle\n")
@@ -219,6 +220,7 @@ test("context_search filters by path and extension and can include bounded conte
           pathContains: "src/",
           extensions: ["ts"],
           contextLines: 1,
+          maxFiles: 1,
         },
         context(root),
       ),
@@ -271,6 +273,39 @@ test("context_related finds imports, imported-by files, likely tests, siblings, 
     assert.ok(indexRelated.sameBasename.some((entry) => entry.path === "src/index.md"))
     assert.ok(indexRelated.siblings.some((entry) => entry.path === "src/helper.ts"))
     assert.ok(helperRelated.importedBy.some((entry) => entry.path === "src/index.ts"))
+
+    const limited = JSON.parse(await pluginTools.context_related.execute({ path: "src/index.ts", maxResults: 1 }, context(root)))
+    const limitedCount =
+      limited.directImports.length +
+      limited.importedBy.length +
+      limited.likelyTests.length +
+      limited.sameBasename.length +
+      limited.siblings.length
+    assert.equal(limitedCount, 1)
+    assert.equal(limited.truncated, true)
+  })
+})
+
+test("direct file tools refuse generated and dependency paths", async () => {
+  await withWorkspace(async (root) => {
+    await writeWorkspaceFile(root, "node_modules/pkg/index.ts", "export const pkg = true\n")
+    await writeWorkspaceFile(root, "dist/index.ts", "export const built = true\n")
+
+    const pluginTools = await tools()
+    await assert.rejects(
+      () => pluginTools.context_read.execute({ path: "node_modules/pkg/index.ts" }, context(root)),
+      /Refusing generated\/dependency\/cache path/,
+    )
+    await assert.rejects(
+      () => pluginTools.context_related.execute({ path: "dist/index.ts" }, context(root)),
+      /Refusing generated\/dependency\/cache path/,
+    )
+
+    const batch = JSON.parse(
+      await pluginTools.context_batch_read.execute({ ranges: [{ path: "node_modules/pkg/index.ts" }] }, context(root)),
+    )
+    assert.equal(batch.results[0].ok, false)
+    assert.match(batch.results[0].error, /Refusing generated\/dependency\/cache path/)
   })
 })
 

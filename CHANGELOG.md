@@ -10,6 +10,10 @@ All notable changes to this project are documented here.
   `contextLines`.
 - Added multi-project isolation tests for identical relative paths across
   different worktrees.
+- Hardened direct read paths so generated, dependency, cache, and VCS
+  directories are refused consistently.
+- Applied `context_search` path and extension filters before the file scan
+  limit, and enforced `context_related.maxResults` across all result groups.
 - Documented the Recursive Language Models inspiration from
   [alexzhang13/rlm](https://github.com/alexzhang13/rlm).
 - Added an agent prompt example for broad repository audits.
