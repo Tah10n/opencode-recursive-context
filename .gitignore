@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.cache/
+.tmp-tests/
+.env
+.env.*
+!.env.example
+.npmrc
+*.tgz
+*.log
+*.tmp
+.DS_Store

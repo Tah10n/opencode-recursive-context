@@ -1,0 +1,50 @@
+{
+  "name": "opencode-recursive-context",
+  "version": "0.1.0",
+  "description": "Safe read-only recursive context tools for OpenCode.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "npm@11.13.0",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "pack:check": "npm pack --dry-run --cache .cache/npm",
+    "verify": "npm run typecheck && npm test && npm run pack:check",
+    "prepack": "npm run build"
+  },
+  "files": [
+    "dist",
+    "src",
+    "docs",
+    "README.md",
+    "SECURITY.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "opencode",
+    "plugin",
+    "recursive-context",
+    "rlm",
+    "context"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@opencode-ai/plugin": "1.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.9",
+    "typescript": "5.8.2"
+  }
+}
