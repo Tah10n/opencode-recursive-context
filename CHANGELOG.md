@@ -14,6 +14,8 @@ All notable changes to this project are documented here.
   directories are refused consistently.
 - Applied `context_search` path and extension filters before the file scan
   limit, and enforced `context_related.maxResults` across all result groups.
+- Reworked link escape coverage to use Windows-compatible directory junctions
+  and verify resolved ignored-directory targets.
 - Documented the Recursive Language Models inspiration from
   [alexzhang13/rlm](https://github.com/alexzhang13/rlm).
 - Added an agent prompt example for broad repository audits.

@@ -36,6 +36,14 @@ async function writeWorkspaceFile(root, relativePath, contents) {
   await writeFile(absolutePath, contents, "utf8")
 }
 
+async function createDirectoryLink(target, linkPath) {
+  try {
+    await symlink(target, linkPath, "junction")
+  } catch {
+    await symlink(target, linkPath, "dir")
+  }
+}
+
 async function tools() {
   const hooks = await RecursiveContextPlugin()
   assert.ok(hooks.tool, "plugin should expose tools")
@@ -290,6 +298,8 @@ test("direct file tools refuse generated and dependency paths", async () => {
   await withWorkspace(async (root) => {
     await writeWorkspaceFile(root, "node_modules/pkg/index.ts", "export const pkg = true\n")
     await writeWorkspaceFile(root, "dist/index.ts", "export const built = true\n")
+    const packageLink = path.join(root, "package-link")
+    await createDirectoryLink(path.join(root, "node_modules", "pkg"), packageLink)
 
     const pluginTools = await tools()
     await assert.rejects(
@@ -306,31 +316,46 @@ test("direct file tools refuse generated and dependency paths", async () => {
     )
     assert.equal(batch.results[0].ok, false)
     assert.match(batch.results[0].error, /Refusing generated\/dependency\/cache path/)
+
+    try {
+      await assert.rejects(
+        () => pluginTools.context_read.execute({ path: "package-link/index.ts" }, context(root)),
+        /Refusing generated\/dependency\/cache path/,
+      )
+    } finally {
+      await rm(packageLink, { recursive: true, force: true })
+    }
   })
 })
 
-test("context_read rejects symlinks that resolve outside the worktree when symlinks are available", async (t) => {
+test("context_read rejects links that resolve outside the worktree", async () => {
   await withWorkspace(async (root) => {
     const outsideRoot = await mkdtemp(path.join(process.cwd(), ".tmp-tests", "outside-"))
-    const outsideFile = path.join(outsideRoot, "secret.txt")
-    const linkPath = path.join(root, "linked-secret.txt")
+    const outsideFile = path.join(outsideRoot, "outside.txt")
+    const linkPath = path.join(root, "outside-link")
+    let requestedPath = "outside-link/outside.txt"
 
     try {
       await writeFile(outsideFile, "outside\n", "utf8")
-      await symlink(outsideFile, linkPath, "file")
+      try {
+        await createDirectoryLink(outsideRoot, linkPath)
+      } catch {
+        requestedPath = "outside-link"
+        await symlink(outsideFile, linkPath, "file")
+      }
     } catch (error) {
       await rm(outsideRoot, { recursive: true, force: true })
-      t.skip(`symlink unavailable: ${error.code || error.message}`)
-      return
+      throw error
     }
 
     try {
       const pluginTools = await tools()
       await assert.rejects(
-        () => pluginTools.context_read.execute({ path: "linked-secret.txt" }, context(root)),
+        () => pluginTools.context_read.execute({ path: requestedPath }, context(root)),
         /Path resolves outside the worktree/,
       )
     } finally {
+      await rm(linkPath, { recursive: true, force: true })
       await rm(outsideRoot, { recursive: true, force: true })
     }
   })
