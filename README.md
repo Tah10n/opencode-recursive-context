@@ -1,20 +1,24 @@
 # opencode-recursive-context
 
-Safe read-only context tools for OpenCode agents.
+Safe read-only recursive context tools for OpenCode agents.
 
-This project is based on the ideas from
+`opencode-recursive-context` is based on the ideas from
 [alexzhang13/rlm](https://github.com/alexzhang13/rlm), but it deliberately does
-not expose a Python or JavaScript REPL. It gives agents bounded ways to inspect
-a worktree without dumping the whole project into the root conversation:
+not expose a Python or JavaScript REPL. Instead, it gives agents bounded tools
+for mapping, searching, and reading a worktree without dumping the whole project
+into the root conversation.
 
-- `context_outline` - compact worktree outline and local guidance hints.
-- `context_files` - scoped file inventory.
-- `context_search` - literal text search with bounded excerpts.
-- `context_read` - line-bounded text reader.
+The goal is simple: map first, read only the relevant slices, delegate narrow
+checks when needed, and keep the root model focused on decisions.
 
-The goal is to support recursive-context orchestration: map first, read only
-the relevant slices, delegate narrow read-only checks, and keep the root model
-focused on decisions.
+## What It Provides
+
+| Tool | Use it for | Safety bounds |
+| --- | --- | --- |
+| `context_outline` | A compact worktree outline and local guidance hints. | Returns relative paths and does not expose the absolute worktree path. |
+| `context_files` | Scoped file inventories before choosing focused reads. | Skips VCS, dependency, generated, cache, and secret-like paths. |
+| `context_search` | Literal evidence search across bounded file sets. | Skips large, unreadable, binary-like, and secret-like files; truncates long matches. |
+| `context_read` | Line-bounded reads of specific text files. | Confines paths to the worktree and rejects traversal, symlink escapes, oversized files, binary-like files, and secret-like paths. |
 
 ## Requirements
 
@@ -22,15 +26,44 @@ focused on decisions.
   newer on the Node 24 release line, or Node.js 26 and newer.
 - OpenCode with the `@opencode-ai/plugin` API compatible with this package.
 
-## Usage
+## Quick Start
 
-Install this package as an OpenCode plugin, then add it to the relevant
-OpenCode plugin list for the agents that should receive the `context_*` tools.
-During local development, load the package from this repository after running
-`npm run build`.
+From this repository checkout:
 
-The host OpenCode profile decides which agents receive these tools and when
-they should use them. This package only exposes the read-only capability layer.
+```sh
+npm ci
+npm run build
+npm run verify
+```
+
+After publishing the package, install it where your OpenCode configuration loads
+plugins:
+
+```sh
+npm install opencode-recursive-context
+```
+
+During local development, point OpenCode at the built package output after
+running `npm run build`. The package export is `dist/index.js`.
+
+## OpenCode Setup
+
+Add this package to your OpenCode plugin list using the plugin format supported
+by your installed OpenCode version. Then grant the tools only to agents that
+need broad read-only repository context.
+
+Typical agent tool permissions:
+
+```yaml
+tools:
+  context_outline: allow
+  context_files: allow
+  context_search: allow
+  context_read: allow
+```
+
+The host OpenCode profile decides which agents receive these tools and when they
+should use them. This package only exposes the capability layer.
 
 ## Agent Prompt Example
 
@@ -53,15 +86,21 @@ directly.
    verification gaps.
 ```
 
-## Safety model
+## Safety Model
 
 - Read-only tools only.
+- No shell execution.
+- No generated-code REPL.
+- No network access.
+- No writes.
 - Paths are confined to the current OpenCode worktree.
 - Real paths are checked so symlinks or junctions cannot escape the worktree.
 - Common dependency, generated, cache, and VCS directories are skipped.
 - Secret-like files and paths are refused before reading.
 - Binary-like files are refused.
 - File count, file size, line count, and match text are bounded.
+
+See [docs/security.md](docs/security.md) for the detailed security notes.
 
 ## Development
 
@@ -84,18 +123,36 @@ Keep the plugin read-only. Changes that add writes, shell execution, network
 access, package installation, or background indexing should be treated as a
 different plugin with a different threat model.
 
-## Publishing
+## Package Contents
+
+The package entrypoint is `dist/index.js`, with TypeScript declarations emitted
+to `dist/index.d.ts`. The npm package includes:
+
+- `dist`
+- `src`
+- `docs`
+- `README.md`
+- `SECURITY.md`
+- `CHANGELOG.md`
+- `LICENSE`
+
+## Release Checklist
 
 Before publishing or pushing a release branch:
 
 ```sh
 npm ci
 npm run verify
+npm audit --audit-level=moderate --cache .cache/npm
+npm pack --dry-run --json --cache .cache/npm
 ```
 
-The package entrypoint is `dist/index.js`, with TypeScript declarations emitted
-to `dist/index.d.ts`. The npm package includes `dist`, `src`, `docs`,
-`README.md`, `SECURITY.md`, and `LICENSE`.
+For the first public GitHub release, also add repository metadata to
+`package.json` once the repository URL exists:
+
+- `repository`
+- `bugs`
+- `homepage`
 
 ## Acknowledgements
 
