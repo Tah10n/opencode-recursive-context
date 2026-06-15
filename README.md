@@ -11,6 +11,10 @@ into the root conversation.
 The goal is simple: map first, read only the relevant slices, delegate narrow
 checks when needed, and keep the root model focused on decisions.
 
+For the host orchestration profile that decides when these read-only context
+tools should be used, see
+[`opencode-harness`](https://github.com/Tah10n/opencode-harness).
+
 ## What It Provides
 
 | Tool | Use it for | Safety bounds |
