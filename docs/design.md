@@ -1,7 +1,8 @@
 ﻿# Design
 
-`opencode-recursive-context` exposes a narrow context API instead of a general
-execution environment.
+`opencode-recursive-context` is based on the Recursive Language Models concept
+from [alexzhang13/rlm](https://github.com/alexzhang13/rlm). It exposes a narrow
+context API instead of a general execution environment.
 
 ## Non-goals
 

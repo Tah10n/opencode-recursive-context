@@ -13,7 +13,7 @@
   },
   "sideEffects": false,
   "engines": {
-    "node": ">=22"
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
   },
   "packageManager": "npm@11.13.0",
   "scripts": {
@@ -41,7 +41,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@opencode-ai/plugin": "1.4.7"
+    "@opencode-ai/plugin": "1.17.7"
   },
   "devDependencies": {
     "@types/node": "22.13.9",

@@ -66,6 +66,20 @@ test("context_files lists ordinary files while skipping generated and secret-lik
   })
 })
 
+test("context_outline does not expose the absolute worktree path", async () => {
+  await withWorkspace(async (root) => {
+    await writeWorkspaceFile(root, "src/app.ts", "export const value = 1\n")
+
+    const pluginTools = await tools()
+    const resultText = await pluginTools.context_outline.execute({}, context(root))
+    const result = JSON.parse(resultText)
+
+    assert.equal(result.worktree, ".")
+    assert.equal(Object.hasOwn(result, "root"), false)
+    assert.equal(resultText.includes(root), false)
+  })
+})
+
 test("context_read refuses traversal, secret-like files, and binary-like files", async () => {
   await withWorkspace(async (root) => {
     await writeWorkspaceFile(root, "safe.txt", "hello\n")

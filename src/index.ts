@@ -290,7 +290,7 @@ export const RecursiveContextPlugin: Plugin = async () => {
 
           return JSON.stringify(
             {
-              root,
+              worktree: ".",
               guidance,
               filesSample: top.files.slice(0, 80),
               truncated: top.truncated,
