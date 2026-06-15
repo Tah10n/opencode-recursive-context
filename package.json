@@ -41,6 +41,14 @@
     "context"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tah10n/opencode-recursive-context.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Tah10n/opencode-recursive-context/issues"
+  },
+  "homepage": "https://github.com/Tah10n/opencode-recursive-context#readme",
   "dependencies": {
     "@opencode-ai/plugin": "1.17.7"
   },
