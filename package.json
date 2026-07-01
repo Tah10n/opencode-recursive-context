@@ -1,7 +1,7 @@
 {
   "name": "opencode-recursive-context",
   "version": "0.1.0",
-  "description": "Safe read-only recursive context tools for OpenCode.",
+  "description": "High-assurance read-only recursive context tools for OpenCode.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -38,7 +38,10 @@
     "plugin",
     "recursive-context",
     "rlm",
-    "context"
+    "context",
+    "read-only",
+    "code-review",
+    "fingerprint"
   ],
   "license": "MIT",
   "repository": {

@@ -1,15 +1,16 @@
 # opencode-recursive-context
 
-Safe read-only recursive context tools for OpenCode agents.
+High-assurance read-only recursive context tools for OpenCode agents.
 
 `opencode-recursive-context` is based on the ideas from
 [alexzhang13/rlm](https://github.com/alexzhang13/rlm), but it deliberately does
 not expose a Python or JavaScript REPL. Instead, it gives agents bounded tools
-for mapping, searching, and reading a worktree without dumping the whole project
-into the root conversation.
+for mapping, searching, fingerprinting, and reading a worktree without dumping
+the whole project into the root conversation.
 
-The goal is simple: map first, read only the relevant slices, delegate narrow
-checks when needed, and keep the root model focused on decisions.
+The goal is simple: map first, read only the relevant slices, compare hashes or
+fingerprints when stale context matters, delegate narrow checks when needed, and
+keep the root model focused on decisions.
 
 For the host orchestration profile that decides when these read-only context
 tools should be used, see
@@ -19,14 +20,14 @@ tools should be used, see
 
 | Tool | Use it for | Safety bounds |
 | --- | --- | --- |
-| `context_outline` | A compact worktree outline and local guidance hints. | Returns relative paths and does not expose the absolute worktree path. |
-| `context_map` | A project map with guidance, manifests, CI files, languages, roles, directories, and optional symbol samples. | Recomputes from the current worktree for each call and returns only relative paths. |
-| `context_files` | Scoped file inventories before choosing focused reads. | Skips VCS, dependency, generated, cache, and secret-like paths. |
-| `context_search` | Literal evidence search with optional path, extension, and context-line filters. | Skips large, unreadable, binary-like, and secret-like files; truncates long matches and context lines. |
-| `context_batch_read` | Multiple bounded line-range reads in one call. | Applies per-file safety checks and a total line cap. |
-| `context_read` | Line-bounded reads of specific text files. | Confines paths to the worktree and rejects traversal, symlink escapes, oversized files, binary-like files, and secret-like paths. |
-| `context_symbols` | Lightweight symbol discovery for TypeScript, JavaScript, Python, and Java. | Uses deterministic text patterns, no runtime language server or index. |
-| `context_related` | Related-file discovery for imports, imported-by files, likely tests, siblings, and same-basename files. | Resolves only within the current worktree and returns grouped relative paths. |
+| `context_outline` | A compact worktree outline, enabled tool list, and local guidance hints. | Returns schema v2 metadata, relative paths, and no absolute worktree path. |
+| `context_map` | A project map with guidance, manifests, CI files, languages, roles, directories, and optional symbol samples. | Recomputes from the current worktree for each call and reports coverage/fingerprints. |
+| `context_files` | Scoped file inventories before choosing focused reads. | Skips VCS, dependency, generated, cache, and secret-like paths; returns a metadata fingerprint. |
+| `context_search` | Literal evidence search with optional path, extension, and context-line filters. | Skips large, unreadable, binary-like, and secret-like files; returns per-file content hashes and truncation reasons. |
+| `context_batch_read` | Multiple bounded line-range reads in one call. | Applies per-file safety checks, expected hash checks, total byte/line caps, and consistency metadata. |
+| `context_read` | Line-bounded reads of specific text files. | Confines paths to the worktree and rejects traversal, symlink/junction escapes, oversized files, malformed UTF-8, binary-like files, and secret-like paths. |
+| `context_symbols` | Heuristic symbol discovery for TypeScript, JavaScript, Python, and Java. | Uses deterministic text patterns, no runtime language server or index; reports unsupported-language coverage. |
+| `context_related` | Heuristic related-file discovery for imports, imported-by files, likely tests, siblings, and same-basename files. | Resolves only within the current worktree and reports evidence/confidence per relation. |
 
 ## Requirements
 
@@ -57,10 +58,18 @@ running `npm run build`. The package export is `dist/index.js`.
 ## OpenCode Setup
 
 Add this package to your OpenCode plugin list using the plugin format supported
-by your installed OpenCode version. Then grant the tools only to agents that
-need broad read-only repository context.
+by your installed OpenCode version. The default toolset is `minimal`:
 
-Typical agent tool permissions:
+- `context_outline`
+- `context_files`
+- `context_search`
+- `context_read`
+
+Use `toolset: "advanced"` or an explicit `enabledTools` allowlist when an agent
+also needs map, batch-read, symbols, and related-file tools. Then grant only the
+exposed tools to agents that need broad read-only repository context.
+
+Typical advanced agent tool permissions:
 
 ```yaml
 tools:
@@ -76,6 +85,35 @@ tools:
 
 The host OpenCode profile decides which agents receive these tools and when they
 should use them. This package only exposes the capability layer.
+
+See [docs/plugin-options.md](docs/plugin-options.md) for toolsets, host
+ceilings, and additive path policy options.
+
+## Output and Consistency
+
+JSON tool results use schema version 2 and include:
+
+- `schemaVersion`, `tool`, `worktree: "."`, and `scope`;
+- `snapshot` fingerprints for metadata or content observed during the call;
+- `coverage` counters and detailed truncation flags;
+- applied `limits` and actual `usage`;
+- tool-specific results.
+
+`context_read` keeps text output by default for compatibility. Set
+`format: "json"` to receive hashes, selected range metadata, UTF-8 encoding,
+before/after file metadata, and read-stability fields.
+
+For stale-context protection, use `expectedSha256` on reads and
+`expectedSnapshotFingerprint` on `context_search`. Broad tools also accept
+`verifySnapshot` and `requireStableSnapshot`.
+
+Reference docs:
+
+- [docs/output-schema.md](docs/output-schema.md)
+- [docs/snapshot-consistency.md](docs/snapshot-consistency.md)
+- [docs/tool-limits.md](docs/tool-limits.md)
+- [docs/semantic-coverage.md](docs/semantic-coverage.md)
+- [docs/plugin-options.md](docs/plugin-options.md)
 
 ## Agent Prompt Example
 
@@ -93,10 +131,15 @@ directly.
 3. Use `context_search` for literal evidence, with `pathContains`,
    `extensions`, and `contextLines` when they reduce noise.
 4. Use `context_batch_read` for several focused ranges, or `context_read` for a
-   single focused range.
-5. Do not use these tools to read secret-like paths, generated directories,
+   single focused range. Use `format: "json"` when you need hashes or
+   consistency metadata.
+5. Compare `snapshot.fingerprint` or `sha256` when verifying that later reads
+   refer to the same observed state.
+6. Treat `context_symbols` and `context_related` as heuristic orientation, not
+   complete semantic analysis.
+7. Do not use these tools to read secret-like paths, generated directories,
    dependency directories, or unrelated files.
-6. Report findings with file paths, line references, evidence, and any remaining
+8. Report findings with file paths, line references, evidence, and any remaining
    verification gaps.
 ```
 
@@ -124,8 +167,11 @@ local paths or user names.
 - Real paths are checked so symlinks or junctions cannot escape the worktree.
 - Common dependency, generated, cache, and VCS directories are skipped.
 - Secret-like files and paths are refused before reading.
-- Binary-like files are refused.
-- File count, file size, line count, and match text are bounded.
+- Secret protection is path/name based; it is not content DLP.
+- Files must be valid UTF-8 text. NUL bytes, malformed UTF-8, and
+  control-heavy binary-like content are refused.
+- File count, file size, total bytes, total lines, matches, batch ranges,
+  directories, and duration are bounded by host ceilings.
 
 See [docs/security.md](docs/security.md) for the detailed security notes.
 
@@ -175,7 +221,7 @@ npm pack --dry-run --json --cache .cache/npm
 ```
 
 Repository metadata is configured in `package.json`; update it if the GitHub
-repository moves.
+repository moves. Do not bump the package version without a release decision.
 
 ## Acknowledgements
 

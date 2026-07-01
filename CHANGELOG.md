@@ -4,6 +4,29 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+- Added schema version 2 JSON envelopes with `tool`, `worktree`, `scope`,
+  `snapshot`, `coverage`, `limits`, and `usage` metadata.
+- Added metadata/content fingerprints, optional snapshot verification, and
+  `expectedSnapshotFingerprint` support for `context_search`.
+- Added full-file SHA-256 reporting and `expectedSha256` mismatch handling for
+  `context_read` and `context_batch_read`.
+- Added read-stability checks using read-only handles, before/after metadata,
+  one retry for changing files, fatal UTF-8 decoding, and stronger binary
+  heuristics.
+- Added hard aggregate host ceilings, caller-only-lowerable limits, deadlines,
+  abort handling, and detailed truncation flags.
+- Added toolsets (`minimal`, `advanced`, `all`, `none`) and explicit
+  `enabledTools` exposure control. The default toolset is now `minimal`.
+- Added additive plugin policy options for extra ignored directories and
+  secret-like paths.
+- Extended `context_symbols` and `context_related` with heuristic coverage,
+  evidence/confidence metadata, and documented unsupported semantics.
+- Expanded tests for schema metadata, hashes, stale snapshots, limits, tool
+  exposure, encoding/binary handling, abort/deadline behavior, additive policy,
+  and multi-worktree fingerprint isolation.
+- Added documentation for output schema, snapshot consistency, tool limits,
+  semantic coverage, and plugin options.
+- Updated CI to run on Ubuntu and Windows for Node 22 and Node 24.
 - Added `context_map`, `context_batch_read`, `context_symbols`, and
   `context_related` read-only tools.
 - Extended `context_search` with `pathContains`, `extensions`, and

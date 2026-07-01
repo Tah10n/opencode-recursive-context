@@ -26,6 +26,19 @@ npm ci
 npm run verify
 ```
 
-The test suite covers worktree confinement, traversal rejection, symlink escape
-rejection, secret-like path refusal, binary-like file refusal, and bounded search
-excerpts.
+The test suite covers worktree confinement, traversal and absolute-path
+rejection, symlink/junction escape rejection, broken link handling, secret-like
+path refusal, generated path refusal, malformed UTF-8 and binary-like file
+refusal, bounded search excerpts, hash mismatch handling, snapshot fingerprints,
+abort/deadline behavior, host ceilings, tool exposure, and multi-worktree
+isolation.
+
+## Security boundary
+
+Secret refusal is path/name based, not content DLP. Do not rely on this plugin
+to detect credentials stored in ordinary source files. Host permissions,
+repository hygiene, and agent tool grants remain required controls.
+
+The plugin is best-effort against filesystem races within Node/platform limits:
+reads use read-only handles and compare before/after handle metadata, but no
+cross-platform claim is made that every TOCTOU race is impossible.
